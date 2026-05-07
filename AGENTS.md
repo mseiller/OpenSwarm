@@ -1,12 +1,34 @@
-# OpenSwarm — Customization Guide
+# BJJ Swarm — Customization Guide
 
 This file gives coding agents (Cursor, Claude Code, Codex, etc.) everything they need to understand and customize this swarm. Read it before making any changes.
 
 ---
 
-## What is OpenSwarm?
+## What is BJJ Swarm?
 
-OpenSwarm is a multi-agent AI team you can fork and reshape into any kind of swarm you need — SEO, sales, research, finance, customer support, or anything else. Each agent is a specialist. They collaborate through a shared orchestrator.
+BJJ Swarm is a domain-specific fork of [VRSEN/OpenSwarm](https://github.com/VRSEN/OpenSwarm), customized for Brazilian Jiu-Jitsu curriculum production. Each agent is a specialist in one part of the curriculum pipeline — they collaborate through a shared orchestrator to produce complete lesson packages from a single prompt.
+
+---
+
+## Curriculum Pipeline
+
+One prompt → complete BJJ lesson package:
+
+```
+"Build a half guard sweep module for blue belts"
+         │
+         ▼
+    Deep Research ──────────────────────────────────────┐
+         │                                                 │
+         ▼                                                 ▼
+  Slides Agent          Docs Agent           Image Agent    Video Agent
+  (lesson deck)   (instructor guide)   (position diagrams)  (ref clips)
+         │                   │                    │            │
+         └───────────────────┴────────────────────┴────────────┘
+                                   │
+                                   ▼
+                      Complete Curriculum Package
+```
 
 ---
 
