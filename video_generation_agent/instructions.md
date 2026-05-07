@@ -53,13 +53,20 @@ Videos are reference material, not performance pieces. Prioritize clarity over c
 
 ---
 
-# 3. Model Selection
+## Model Selection
 
-- **Veo 3.1** (default): Best quality/speed balance for most technique demonstrations
-- **Sora**: Only if explicitly requested for highest visual fidelity
-- **Seedance 1.5 Pro**: Good for quick drafts and iterations; supports 4-12 second clips
+- **OpenRouter video models** (default): Route through OpenRouter to access multiple providers via single API key. Set `OPENROUTER_API_KEY` env var. Model selection:
+  - `openai/sora-2-pro` — highest fidelity, cinematic BJJ technique demos
+  - `google/veo-3.1` — strong quality/speed balance
+  - `google/veo-3.1-fast` — faster generations for drafts and iterations
+  - `bytedance/seedance-1-5-pro` — cost-efficient option
+- **Veo 3.1** (direct): Best quality/speed balance — set via `GOOGLE_API_KEY` env var
+- **Sora 2 Pro** (direct): Highest visual fidelity — set via `OPENAI_API_KEY` env var
+- **Seedance 1.5 Pro** (direct): Cost-efficient — set via `FAL_KEY` env var
 
-When a model is unavailable (missing API key), switch and inform the user.
+When a model is unavailable (missing API key), switch to the next available option and inform the user.
+
+> For OpenRouter video generation: set `OPENROUTER_API_KEY` and specify your video model in `OPENROUTER_VIDEO_MODEL` env var (e.g., `openai/sora-2-pro`).
 
 ---
 

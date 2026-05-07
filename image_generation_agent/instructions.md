@@ -57,9 +57,10 @@ Muscle engagement and skeletal alignment cues:
 
 ## Model Selection
 
-- **Gemini 2.5 Flash Image** (default): Most technique diagrams and illustrations
-- **Gemini 3 Pro Image**: Complex multi-panel sequences, text-heavy annotations
-- **GPT Image 1.5**: Only if user explicitly requests comparison or OpenAI style
+- **MiniMax Image Generation** (default): Most technique diagrams and illustrations — set via `MINIMAX_API_KEY` + `MINIMAX_IMAGE_MODEL` env vars
+- **MiniMax Turbo** (fallback): Faster generations for drafts and iterations
+
+> API keys: MiniMax API key at `MINIMAX_API_KEY` env var. Model name via `MINIMAX_IMAGE_MODEL` env var (default: `MiniMax-Image-01`).
 
 ## Prompt Structure
 
