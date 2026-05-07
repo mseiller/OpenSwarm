@@ -29,7 +29,6 @@ def create_virtual_assistant() -> Agent:
             response_include=["web_search_call.action.sources"] if is_openai_provider() else None,
         ),
         tools=[
-            WebSearchTool(),
             PersistentShellTool,
             IPythonInterpreter,
             CopyFile,
@@ -37,7 +36,7 @@ def create_virtual_assistant() -> Agent:
             FindTools,
             ManageConnections,
             SearchTools,
-        ],
+        ] + ([WebSearchTool()] if is_openai_provider() else []),
         conversation_starters=[
             "Send a summary of my unread emails to Slack.",
             "Schedule a meeting with my team for next Monday.",

@@ -22,7 +22,6 @@ def create_data_analyst() -> Agent:
         tools_folder=os.path.join(current_dir, "tools"),
         model=get_default_model(),
         tools=[
-            WebSearchTool(),
             PersistentShellTool,
             IPythonInterpreter,
             LoadFileAttachment,
@@ -31,7 +30,7 @@ def create_data_analyst() -> Agent:
             FindTools,
             ManageConnections,
             SearchTools,
-        ],
+        ] + ([WebSearchTool()] if is_openai_provider() else []),
         model_settings=ModelSettings(
             reasoning=Reasoning(effort="medium", summary="auto") if is_openai_provider() else None,
             truncation="auto",

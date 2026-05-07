@@ -43,7 +43,7 @@ def create_docs_agent() -> Agent:
             reasoning=Reasoning(effort="medium", summary="auto") if is_openai_provider() else None,
             response_include=["web_search_call.action.sources"] if is_openai_provider() else None,
         ),
-        tools=[WebSearchTool(), IPythonInterpreter, CopyFile],
+        tools=[IPythonInterpreter, CopyFile] + ([WebSearchTool()] if is_openai_provider() else []),
         conversation_starters=[
             "Draft Week 34 client status report with a table and export as PDF.",
             "Create a one-page AI chatbot proposal and export as DOCX.",

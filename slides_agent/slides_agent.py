@@ -86,8 +86,7 @@ def create_slides_agent() -> Agent:
             LoadFileAttachment,
             CopyFile,
             ReadFile,
-            WebSearchTool(search_context_size="high"),
-        ],
+        ] + ([WebSearchTool(search_context_size="high")] if is_openai_provider() else []),
         model=get_default_model(),
         model_settings=ModelSettings(
             reasoning=Reasoning(effort="high", summary="auto") if is_openai_provider() else None,
