@@ -45,6 +45,11 @@ def is_seedance_model(model: str) -> bool:
     return model.startswith("seedance-")
 
 
+def is_openrouter_model(model: str) -> bool:
+    """OpenRouter uses 'provider/model' format, e.g. 'openai/sora-2-pro'."""
+    return "/" in model
+
+
 if os.path.isfile("/.dockerenv"):
     MNT_DIR = Path("/app/mnt")
 else:

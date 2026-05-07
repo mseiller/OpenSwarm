@@ -19,7 +19,7 @@ from PIL import Image as PILImage
 from io import BytesIO
 
 from agency_swarm import BaseTool, ToolOutputText
-from shared_tools.model_availability import video_model_availability_message
+from shared_tools.model_availability import video_model_availability_message, openrouter_available
 from shared_tools.openai_client_utils import get_openai_client
 
 from .utils.video_utils import (
@@ -31,6 +31,7 @@ from .utils.video_utils import (
     is_veo_model,
     is_sora_model,
     is_seedance_model,
+    is_openrouter_model,
     resolve_input_reference,
     validate_resolution,
     save_video_with_metadata,
@@ -87,6 +88,12 @@ class GenerateVideo(BaseTool):
         description="The name for the generated video file (without extension)",
     )
     model: Literal[
+        # OpenRouter models (use OPENROUTER_API_KEY)
+        "openai/sora-2-pro",
+        "google/veo-3.1",
+        "google/veo-3.1-fast",
+        "bytedance/seedance-1-5-pro",
+        # Direct provider models
         "sora-2",
         "sora-2-pro",
         "veo-3.1-generate-preview",
@@ -94,7 +101,11 @@ class GenerateVideo(BaseTool):
         "seedance-1.5-pro",
     ] = Field(
         ...,
-        description="Video generation model to use.",
+        description=(
+            "Video generation model to use. "
+            "OpenRouter models (e.g. openai/sora-2-pro) require OPENROUTER_API_KEY. "
+            "Direct models require their respective provider keys (GOOGLE_API_KEY, OPENAI_API_KEY, FAL_KEY)."
+        ),
     )
     seconds: int = Field(
         default=8,
@@ -156,19 +167,33 @@ class GenerateVideo(BaseTool):
 
     @model_validator(mode="after")
     def _validate_seconds_for_model(self) -> "GenerateVideo":
-        if is_sora_model(self.model) and self.seconds not in {4, 8, 12}:
+        model = self.model
+
+        # Map OpenRouter model IDs to their underlying provider for validation
+        if is_openrouter_model(model):
+            if model == "openai/sora-2-pro" and self.seconds not in {4, 8, 12}:
+                raise ValueError("openai/sora-2-pro supports only 4, 8, or 12 second clips.")
+            if model in ("google/veo-3.1", "google/veo-3.1-fast") and self.seconds not in {4, 6, 8}:
+                raise ValueError(f"{model} supports only 4, 6, or 8 second clips.")
+            # bytedance/seedance-1-5-pro: any 4-12 is fine, no validation needed
+        elif is_sora_model(model) and self.seconds not in {4, 8, 12}:
             raise ValueError("Sora supports only 4, 8, or 12 second clips.")
-        if is_veo_model(self.model) and self.seconds not in {4, 6, 8}:
+        elif is_veo_model(model) and self.seconds not in {4, 6, 8}:
             raise ValueError("Veo supports only 4, 6, or 8 second clips.")
-        if is_sora_model(self.model) and self.asset_image_ref is not None:
+
+        if is_sora_model(model) and self.asset_image_ref is not None:
             raise ValueError("Sora does not support asset_image_ref. Use first_frame_ref instead.")
-        if is_seedance_model(self.model) and self.asset_image_ref is not None:
+        if is_seedance_model(model) and self.asset_image_ref is not None:
             raise ValueError("Seedance does not support asset_image_ref. Use first_frame_ref instead.")
         return self
 
     async def run(self) -> list:
         """Generate a marketing video using the chosen model."""
         load_dotenv(override=True)
+
+        if is_openrouter_model(self.model):
+            return await self._generate_with_openrouter(self.model)
+
         if is_seedance_model(self.model):
             return await self._generate_with_seedance(self.model)
 
@@ -256,6 +281,149 @@ class GenerateVideo(BaseTool):
                 )
 
             return save_video_with_metadata(client, video.id, self.name, self.product_name)
+
+        finally:
+            if reference_file is not None and hasattr(reference_file, "close"):
+                try:
+                    reference_file.close()
+                except Exception:
+                    pass
+
+    async def _generate_with_openrouter(self, model: str) -> list:
+        """Generate video via OpenRouter unified API.
+
+        OpenRouter provides an OpenAI-compatible video generation endpoint at
+        https://openrouter.ai/api/v1/videos/generations that routes to the
+        underlying provider (Sora, Veo, Seedance) based on the model ID.
+
+        Requires OPENROUTER_API_KEY env var.
+        """
+        api_key = os.getenv("OPENROUTER_API_KEY")
+        if not api_key:
+            raise ValueError(
+                video_model_availability_message(
+                    self,
+                    failed_requirement="OPENROUTER_API_KEY is not set. "
+                    "OpenRouter video generation requires this env var.",
+                )
+            )
+
+        client = OpenAI(
+            api_key=api_key,
+            base_url="https://openrouter.ai/api/v1",
+            default_headers={
+                "HTTP-Referer": "https://github.com/mseiller/OpenSwarm",
+                "X-Title": "BJJ Swarm",
+            },
+        )
+
+        reference_file = None
+        try:
+            reference_file = resolve_input_reference(
+                self.first_frame_ref,
+                target_size=self.size if self.first_frame_ref else None,
+                product_name=self.product_name,
+            )
+
+            # Build request — OpenRouter uses OpenAI-compatible video API format
+            request_payload: dict = {
+                "model": model,
+                "prompt": self.prompt,
+            }
+
+            # Add duration (in seconds, required by OpenRouter)
+            request_payload["duration"] = self.seconds
+
+            # Add resolution if specified
+            if self.size:
+                request_payload["size"] = self.size
+
+            # Add first-frame reference image
+            if reference_file is not None:
+                # Upload the image to OpenRouter for referencing
+                uploaded = await asyncio.to_thread(
+                    client.files.create,
+                    file=reference_file,
+                    purpose="video-reference",
+                )
+                request_payload["image"] = uploaded.id
+
+            logger.info(f"Submitting video generation request to OpenRouter ({model})...")
+
+            loop = asyncio.get_event_loop()
+
+            # Submit generation job
+            try:
+                video = await loop.run_in_executor(
+                    None,
+                    lambda: client.videos.generate(**request_payload),
+                )
+            except Exception as exc:
+                if _is_transient_network_error(exc):
+                    raise RuntimeError(
+                        f"OpenRouter submission hit a transient network error: {exc}. "
+                        "Please retry this GenerateVideo call."
+                    ) from exc
+                raise
+
+            started_at = asyncio.get_running_loop().time()
+
+            # Poll until complete
+            while getattr(video, "status", None) not in {"completed", "failed", "cancelled"}:
+                logger.info(f"Waiting for OpenRouter video generation... status: {getattr(video, 'status', 'unknown')}")
+                elapsed = asyncio.get_running_loop().time() - started_at
+                if elapsed > VIDEO_GENERATION_TIMEOUT_SECONDS:
+                    raise RuntimeError(
+                        f"OpenRouter video generation timed out after {VIDEO_GENERATION_TIMEOUT_SECONDS} seconds. "
+                        "Please try again later."
+                    )
+                await asyncio.sleep(10)
+                try:
+                    video = await loop.run_in_executor(
+                        None,
+                        lambda: client.videos.retrieve(video.id),
+                    )
+                except Exception as exc:
+                    if not _is_transient_network_error(exc):
+                        raise
+                    logger.warning(f"Transient OpenRouter polling error: {exc}. Retrying...")
+
+            logger.info(f"Video generation status: {video.status}")
+            if video.status != "completed":
+                raise RuntimeError(
+                    f"OpenRouter video generation ended with status: {video.status}. "
+                    f"Response: {getattr(video, 'output', video)}"
+                )
+
+            # Extract video URL from response
+            output = getattr(video, "output", None)
+            if output is None:
+                raise RuntimeError(f"OpenRouter returned no output. Response: {video}")
+
+            video_data = output if isinstance(output, dict) else {"url": str(output)}
+            video_url = video_data.get("url") or (video_data.get("video", {}) or {}).get("url")
+            if not video_url:
+                raise RuntimeError(f"OpenRouter returned no video URL. Response: {output}")
+
+            # Download the video
+            videos_dir = get_videos_dir(self.product_name)
+            output_path = os.path.join(videos_dir, f"{self.name}.mp4")
+
+            logger.info(f"Downloading OpenRouter video to {output_path}...")
+            async with httpx.AsyncClient(timeout=120.0) as http:
+                response = await http.get(video_url)
+                response.raise_for_status()
+            with open(output_path, "wb") as fh:
+                fh.write(response.content)
+
+            # Generate spritesheet and last frame
+            spritesheet_path = os.path.join(videos_dir, f"{self.name}_spritesheet.jpg")
+            await asyncio.to_thread(generate_spritesheet, output_path, spritesheet_path)
+
+            last_frame_path = os.path.join(videos_dir, f"{self.name}_last_frame.jpg")
+            await asyncio.to_thread(extract_last_frame, output_path, last_frame_path)
+
+            return [ToolOutputText(type="text", text=f"Video saved to `{self.name}.mp4`\nPath: {output_path}")]
 
         finally:
             if reference_file is not None and hasattr(reference_file, "close"):

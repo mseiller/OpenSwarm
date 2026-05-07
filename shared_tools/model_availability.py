@@ -43,6 +43,11 @@ def fal_available() -> bool:
     return bool(os.getenv("FAL_KEY"))
 
 
+def openrouter_available() -> bool:
+    _refresh_runtime_env()
+    return bool(os.getenv("OPENROUTER_API_KEY"))
+
+
 def image_model_availability_message(tool=None, *, failed_requirement: str | None = None) -> str:
     lines = []
     if failed_requirement:
@@ -70,11 +75,15 @@ def video_model_availability_message(tool=None, *, failed_requirement: str | Non
         [
             "",
             "Available video models/providers in this environment:",
-            f"- veo-3.1-generate-preview: {_configured(google_available())} (requires GOOGLE_API_KEY add-on)",
-            f"- veo-3.1-fast-generate-preview: {_configured(google_available())} (requires GOOGLE_API_KEY add-on)",
-            f"- seedance-1.5-pro: {_configured(fal_available())} (requires FAL_KEY add-on)",
-            f"- sora-2: {_configured(direct_openai_available(tool))} (requires OpenAI API key auth; not Codex browser auth)",
-            f"- sora-2-pro: {_configured(direct_openai_available(tool))} (requires OpenAI API key auth; not Codex browser auth)",
+            f"- openai/sora-2-pro: {_configured(openrouter_available())} (via OpenRouter — set OPENROUTER_API_KEY)",
+            f"- google/veo-3.1: {_configured(openrouter_available())} (via OpenRouter — set OPENROUTER_API_KEY)",
+            f"- google/veo-3.1-fast: {_configured(openrouter_available())} (via OpenRouter — set OPENROUTER_API_KEY)",
+            f"- bytedance/seedance-1-5-pro: {_configured(openrouter_available())} (via OpenRouter — set OPENROUTER_API_KEY)",
+            f"- veo-3.1-generate-preview: {_configured(google_available())} (direct — requires GOOGLE_API_KEY)",
+            f"- veo-3.1-fast-generate-preview: {_configured(google_available())} (direct — requires GOOGLE_API_KEY)",
+            f"- seedance-1.5-pro: {_configured(fal_available())} (direct — requires FAL_KEY)",
+            f"- sora-2: {_configured(direct_openai_available(tool))} (direct — requires OpenAI API key)",
+            f"- sora-2-pro: {_configured(direct_openai_available(tool))} (direct — requires OpenAI API key)",
             "",
             "If the requested model is unavailable, switch to an available model above or ask the user to run /auth and add the missing add-on key.",
         ]
